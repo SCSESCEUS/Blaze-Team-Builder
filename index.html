@@ -42,9 +42,29 @@
               <h2>Student Pool</h2>
               <p id="studentPoolCount" class="panel-meta">0 students</p>
             </div>
-            <label class="search-field">
-              <span class="visually-hidden">Filter students</span>
+          </div>
+          <div class="student-filter-bar">
+            <label class="filter-field filter-field-search">
+              <span>Search</span>
               <input id="studentSearch" type="search" placeholder="Filter students">
+            </label>
+            <label class="filter-field">
+              <span>Age</span>
+              <select id="studentAgeFilter">
+                <option value="">All ages</option>
+              </select>
+            </label>
+            <label class="filter-field">
+              <span>Grade</span>
+              <select id="studentGradeFilter">
+                <option value="">All grades</option>
+              </select>
+            </label>
+            <label class="filter-field">
+              <span>Time Preference</span>
+              <select id="studentTimePreferenceFilter">
+                <option value="">Any preference</option>
+              </select>
             </label>
           </div>
           <div class="board-note">
