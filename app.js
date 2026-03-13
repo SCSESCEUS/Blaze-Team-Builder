@@ -25,6 +25,9 @@ const addTeamButton = document.getElementById("addTeamButton");
 const addSlotButton = document.getElementById("addSlotButton");
 const resetButton = document.getElementById("resetButton");
 const studentSearch = document.getElementById("studentSearch");
+const studentAgeFilter = document.getElementById("studentAgeFilter");
+const studentGradeFilter = document.getElementById("studentGradeFilter");
+const studentTimePreferenceFilter = document.getElementById("studentTimePreferenceFilter");
 const studentPool = document.getElementById("studentPool");
 const teamsGrid = document.getElementById("teamsGrid");
 const studentPoolCount = document.getElementById("studentPoolCount");
@@ -61,6 +64,9 @@ function bindGlobalEvents() {
   addSlotButton.addEventListener("click", () => openSlotDialog());
   resetButton.addEventListener("click", handleResetBoard);
   studentSearch.addEventListener("input", render);
+  studentAgeFilter.addEventListener("change", render);
+  studentGradeFilter.addEventListener("change", render);
+  studentTimePreferenceFilter.addEventListener("change", render);
 
   studentForm.addEventListener("submit", handleStudentFormSubmit);
   teamForm.addEventListener("submit", handleTeamFormSubmit);
@@ -284,6 +290,7 @@ function saveState() {
 }
 
 function render() {
+  renderStudentFilters();
   const filteredStudents = getFilteredStudents();
   const slotGroups = getSlotGroups();
   const poolStudents = state.students.filter((student) => student.teamId === null);
@@ -295,6 +302,46 @@ function render() {
 
   studentPoolCount.textContent = `${poolStudents.length} unassigned / ${state.students.length} total`;
   teamCount.textContent = `${state.teams.length} teams / ${state.slots.length} time slots / ${assignedStudents} assigned`;
+}
+
+function renderStudentFilters() {
+  syncStudentFilterOptions(studentAgeFilter, collectStudentFilterValues(state.students.map((student) => student.age)), "All ages");
+  syncStudentFilterOptions(studentGradeFilter, collectStudentFilterValues(state.students.map((student) => student.grade)), "All grades");
+  syncStudentFilterOptions(
+    studentTimePreferenceFilter,
+    collectStudentFilterValues(state.students.flatMap((student) => student.timePreferences || [])),
+    "Any preference"
+  );
+}
+
+function collectStudentFilterValues(values) {
+  return [...new Set(values
+    .map((value) => `${value || ""}`.trim())
+    .filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    }));
+}
+
+function syncStudentFilterOptions(select, values, emptyLabel) {
+  const currentValue = select.value;
+  const fragment = document.createDocumentFragment();
+
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = emptyLabel;
+  fragment.append(defaultOption);
+
+  values.forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    fragment.append(option);
+  });
+
+  select.replaceChildren(fragment);
+  select.value = values.includes(currentValue) ? currentValue : "";
 }
 
 function renderStudentPool(filteredStudents) {
@@ -622,9 +669,9 @@ function createEmptyState(message) {
 
 function getFilteredStudents() {
   const query = studentSearch.value.trim().toLowerCase();
-  if (!query) {
-    return [...state.students];
-  }
+  const ageFilter = studentAgeFilter.value.trim().toLowerCase();
+  const gradeFilter = studentGradeFilter.value.trim().toLowerCase();
+  const timePreferenceFilter = studentTimePreferenceFilter.value.trim().toLowerCase();
 
   return state.students.filter((student) => {
     const searchText = [
@@ -639,7 +686,16 @@ function getFilteredStudents() {
       ...(student.timePreferences || []),
     ].join(" ").toLowerCase();
 
-    return searchText.includes(query);
+    const matchesAge = !ageFilter || `${student.age || ""}`.trim().toLowerCase() === ageFilter;
+    const matchesGrade = !gradeFilter || `${student.grade || ""}`.trim().toLowerCase() === gradeFilter;
+    const matchesTimePreference = !timePreferenceFilter || (student.timePreferences || []).some(
+      (value) => `${value || ""}`.trim().toLowerCase() === timePreferenceFilter
+    );
+
+    return (!query || searchText.includes(query))
+      && matchesAge
+      && matchesGrade
+      && matchesTimePreference;
   });
 }
 
@@ -905,6 +961,9 @@ function handleResetBoard() {
   state = cloneData(defaultState);
   expandedStudentIds.clear();
   studentSearch.value = "";
+  studentAgeFilter.value = "";
+  studentGradeFilter.value = "";
+  studentTimePreferenceFilter.value = "";
   saveAndRender();
   setStatus("Board reset. Added the default teams back in.");
 }
@@ -1044,11 +1103,18 @@ function handleTeamPointerDown(event, teamId, teamCard) {
     return;
   }
 
-  if (event.button !== undefined && event.button !== 0) {
+  if (event.pointerType === "mouse" && event.button !== 0) {
+    return;
+  }
+
+  const header = event.currentTarget;
+  if (!(header instanceof Element)) {
     return;
   }
 
   event.preventDefault();
+  header.setPointerCapture?.(event.pointerId);
+  header.addEventListener("lostpointercapture", handleTeamPointerLostCapture, { once: true });
 
   const rect = teamCard.getBoundingClientRect();
   const preview = teamCard.cloneNode(true);
@@ -1064,6 +1130,7 @@ function handleTeamPointerDown(event, teamId, teamCard) {
   activeTeamPointerDrag = {
     teamId,
     pointerId: event.pointerId,
+    header,
     teamCard,
     preview,
     offsetX: event.clientX - rect.left,
@@ -1115,6 +1182,14 @@ function handleTeamPointerCancel(event) {
   cleanupActiveTeamPointerDrag();
 }
 
+function handleTeamPointerLostCapture(event) {
+  if (!activeTeamPointerDrag || event.pointerId !== activeTeamPointerDrag.pointerId) {
+    return;
+  }
+
+  cleanupActiveTeamPointerDrag();
+}
+
 function updateTeamDragPreviewPosition(clientX, clientY) {
   if (!activeTeamPointerDrag) {
     return;
@@ -1152,6 +1227,10 @@ function updateActiveTeamDropzone(dropzone) {
 function cleanupActiveTeamPointerDrag() {
   if (!activeTeamPointerDrag) {
     return;
+  }
+
+  if (activeTeamPointerDrag.header.hasPointerCapture?.(activeTeamPointerDrag.pointerId)) {
+    activeTeamPointerDrag.header.releasePointerCapture(activeTeamPointerDrag.pointerId);
   }
 
   if (activeTeamPointerDrag.activeDropzone) {
